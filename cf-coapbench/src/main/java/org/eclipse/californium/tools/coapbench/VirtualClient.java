@@ -23,6 +23,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 
@@ -44,6 +45,8 @@ public class VirtualClient implements Runnable, VirtualDevice {
 	private boolean runnable;
 	private int counter;
 	private int lost;
+	private boolean registration = false;
+	private String scheme = null;
 	
 	private InetAddress destAddress;
 	private int destPort;
@@ -55,7 +58,7 @@ public class VirtualClient implements Runnable, VirtualDevice {
 	private boolean checkMID = true;
 	private boolean checkCode = true;
 	private boolean checkLatency = false;
-	
+	private final Object lock = new Object();
 	public VirtualClient(URI uri) throws Exception {
 		this(uri, null, null, null);
 	}
@@ -87,9 +90,22 @@ public class VirtualClient implements Runnable, VirtualDevice {
 		producer.setURI(uri, method, payload);
 	}
 	
+	public void setRegistration(boolean registration) {
+		this.registration = registration;
+	}
+	
 	public void run() {
 		try {
-			latencies.clear();
+			synchronized (lock) {
+				latencies.clear();
+			}
+			//Register the client first if it's needed
+	        if (registration){ 
+	        	if (runnable) {
+	        		sendRequest();
+	        		receiveRegistration();
+	        	}
+	        }
 			while (runnable) {
 				sendRequest();
 				receiveResponse();
@@ -109,6 +125,47 @@ public class VirtualClient implements Runnable, VirtualDevice {
 		socket.send(pSend);
 	}
 	
+	public void receiveRegistration() throws IOException, URISyntaxException {
+		try {
+			boolean mid_correct;
+			long latency;
+			//do {
+				socket.receive(pRecv);
+				latency = System.nanoTime() - timestamp;
+				byte[] resp = pRecv.getData();
+				//System.err.println("Response data from Registration is "+resp.toString());
+				//mid_correct = checkMID(resp);
+				checkCode(resp);
+				
+				//Create a new Registration Update and add it into the producer
+				if (scheme!=null){
+					if (!scheme.substring(scheme.length() - 1).equals("/")){
+						scheme +=  '/';
+					}
+					
+					String rd = null;
+					if (pRecv.getLength() > 8){
+						rd = new String( resp, pRecv.getOffset()+8, pRecv.getLength()-8);
+					}
+					
+					scheme = scheme + "rd/" + rd;
+					
+					URI uri = new URI(scheme);
+				    producer.setURI(uri, "POST", null);
+				}
+			//} while (!mid_correct);
+			if (checkLatency){
+				synchronized (lock) {
+					latencies.add((int) (latency / 1000000));
+				}	
+			}	
+			counter++;
+		} catch (SocketTimeoutException e) {
+//			System.out.println("Timeout occured");
+			lost++;
+		}
+	}
+	
 	public void receiveResponse() throws IOException {
 		try {
 			boolean mid_correct;
@@ -120,8 +177,11 @@ public class VirtualClient implements Runnable, VirtualDevice {
 				mid_correct = checkMID(resp);
 				checkCode(resp);
 			} while (!mid_correct);
-			if (checkLatency)
-				latencies.add((int) (latency / 1000000));
+			if (checkLatency){
+				synchronized (lock) {
+					latencies.add((int) (latency / 1000000));
+				}	
+			}
 			counter++;
 		} catch (SocketTimeoutException e) {
 //			System.out.println("Timeout occured");
@@ -152,7 +212,7 @@ public class VirtualClient implements Runnable, VirtualDevice {
 		return lost;
 	}
 	
-	public ArrayList<Integer> getLatencies() {
+	public synchronized ArrayList<Integer> getLatencies() {
 		return latencies;
 	}
 	
@@ -174,16 +234,21 @@ public class VirtualClient implements Runnable, VirtualDevice {
 	
 	private void checkCode(byte[] bytes) {
 		int c = 0xFF & bytes[1];
-		if (checkCode && c != CoAP.ResponseCode.CONTENT.value) {
+		if (checkCode && (c != CoAP.ResponseCode.CONTENT.value) && (c != CoAP.ResponseCode.CREATED.value)&& (c != CoAP.ResponseCode.CHANGED.value)) {
 			System.err.println("Wrong response code: " + CoAP.ResponseCode.valueOf(c));
 			System.exit(-1);
 		}
+		
 	}
 
 	public boolean isCheckLatency() {
 		return checkLatency;
 	}
 
+	public void setScheme(String scheme){
+		this.scheme = scheme;
+	}
+	
 	public void setCheckLatency(boolean checkLatency) {
 		this.checkLatency = checkLatency;
 	}

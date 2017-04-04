@@ -16,6 +16,9 @@
  ******************************************************************************/
 package org.eclipse.californium.tools.coapbench;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
@@ -36,9 +39,12 @@ public class VirtualClientManager {
 	private Timer timer;
 
 	private URI uri;
+	private String target; 
 	private InetSocketAddress bindAddr;
 	private String method;
 	private String payload;
+	private boolean register = false;
+	private String scheme;
 
 	private long timestamp;
 	private int count;
@@ -53,12 +59,12 @@ public class VirtualClientManager {
 		this(null);
 	}
 	
-	public VirtualClientManager(URI uri) throws Exception {
-		this(uri, null, null, null);
+	public VirtualClientManager(String target) throws Exception {
+		this(target, null, null, null);
 	}
 	
-	public VirtualClientManager(URI uri, InetSocketAddress bindAddr, String method, String payload) throws Exception {
-		this.uri = uri;
+	public VirtualClientManager(String target, InetSocketAddress bindAddr, String method, String payload) throws Exception {
+		this.target = target;
 		this.bindAddr = bindAddr;
 		this.method = method;
 		this.payload = payload;
@@ -92,7 +98,7 @@ public class VirtualClientManager {
 	private void ensurelog() throws Exception {
 		if (log==null) {
 			log = new LogFile(LOG_FILE);
-			log.format("Timeouts, Concurrency, Time, Completed, Throughput | 50%%, 66%%, 75%%, 80%%, 90%%, 95%%, 98%%, 99%%, 100%%, stdev(ms)\n");
+			log.format("Timeouts, Concurrency, Time, Completed, Throughput | 0%%, 10%%, 20%%, 30%%, 40%%, 50%%, 60%%, 65%%, 70%%, 75%%, 80%%, 90%%, 95%%, 98%%, 99%%, 100%%, stdev(ms)\n");
 		}
 	}
 	
@@ -101,10 +107,22 @@ public class VirtualClientManager {
 			for (int i=clients.size()-1; i>=c; i--)
 				clients.remove(i).close(); // close and remove
 		} else {
-			for (int i=clients.size(); i<c; i++) {
-				VirtualClient vc = new VirtualClient(uri, bindAddr, method, payload);
-				vc.setCheckLatency(enableLatency);
-				clients.add(vc);
+			if (!register){ 
+				uri = new URI(target);
+				for (int i=clients.size(); i<c; i++) {
+					VirtualClient vc = new VirtualClient(uri, bindAddr, method, payload);
+					vc.setCheckLatency(enableLatency);
+					clients.add(vc);
+				}
+			} else {
+				for (int i=clients.size(); i<c; i++) {
+					uri = new URI(target + Integer.toString(i));
+					VirtualClient vc = new VirtualClient(uri, bindAddr, method, payload);
+					vc.setRegistration(true);
+					vc.setScheme(scheme);
+					vc.setCheckLatency(enableLatency);
+					clients.add(vc);
+				}
 			}
 		}
 		this.count = c;
@@ -135,7 +153,21 @@ public class VirtualClientManager {
 			} }, time);
 	}
 	
-	public void stop() {
+	public static void write (String filename, int[]x) throws IOException{
+		  BufferedWriter outputWriter = null;
+		  outputWriter = new BufferedWriter(new FileWriter(filename));
+		  for (int i = 0; i < x.length; i++) {
+		    // Maybe:
+		    outputWriter.write(x[i]+"");
+		    // Or:
+		    //outputWriter.write(Integer.toString(x[i]);
+		    outputWriter.newLine();
+		  }
+		  outputWriter.flush();  
+		  outputWriter.close();  
+		}
+	
+	public synchronized void stop() {
 		float dt = (System.nanoTime() - timestamp) / 1000000f;
 		if (verbose)
 			System.out.println("Stop virtual clients and collect results");
@@ -169,8 +201,16 @@ public class VirtualClientManager {
            
         if (lats.length > 0) {
         	Arrays.sort(lats); // bad if length==0
+        	//write("log_array", lats);
+        	int q00 = lats[(int) (lats.length * 0L/100)];
+        	int q10 = lats[(int) (lats.length * 10L/100)];
+        	int q20 = lats[(int) (lats.length * 20L/100)];
+        	int q30 = lats[(int) (lats.length * 30L/100)];
+        	int q40 = lats[(int) (lats.length * 40L/100)];
 			int q50 = lats[(int) (lats.length/2)];
+			int q60 = lats[(int) (lats.length * 60L/100)];
 			int q66 = lats[(int) (lats.length * 2L/3)];
+			int q70 = lats[(int) (lats.length * 70L/100)];
 			int q75 = lats[(int) (lats.length * 3L/4)];
 			int q80 = lats[(int) (lats.length * 4L/5)];
 			int q90 = lats[(int) (lats.length * 9L/10)];
@@ -179,10 +219,12 @@ public class VirtualClientManager {
 			int q99 = lats[(int) (lats.length * 99L/100)];
 			int q100 = lats[lats.length - 1];
 			
-			log.format("%d, %d, %.3f, %d, %.2f | %d, %d, %d, %d, %d, %d, %d, %d, %d, %.1f\n",
+			/*log.format("%d, %d, %.3f, %d, %.2f | %d, %d, %d, %d, %d, %d, %d, %d, %d, %.1f\n",
 					sumTimeout, count, dt/1000f, sum, throughput,
-					q50, q66, q75, q80, q90, q95, q98, q99, q100, var);
-        
+					q50, q66, q75, q80, q90, q95, q98, q99, q100, var);*/
+			log.format("%d, %d, %.3f, %d, %.2f | %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %.1f\n",
+					sumTimeout, count, dt/1000f, sum, throughput,
+					q00, q10, q20, q30, q40, q50, q60, q66, q70, q75, q80, q90, q95, q98, q99, q100, var);
         } else {
         	// no latency
         	log.format("c=%d, t=%.3f, received=%d, timeouts=%d, throughput=%.2f, uri=%s\n", count, dt/1000f, sum, sumTimeout, throughput, uri.toString());
@@ -198,6 +240,14 @@ public class VirtualClientManager {
 		this.enableLatency = enableLatency;
 	}
 
+	public void setRegistration(boolean registration) {
+		this.register = registration;
+	}
+
+	public void setScheme(String scheme){
+		this.scheme = scheme;
+	}
+	
 	public boolean isVerbose() {
 		return verbose;
 	}

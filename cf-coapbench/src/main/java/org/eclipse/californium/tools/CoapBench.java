@@ -22,7 +22,6 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.URI;
 
 import org.eclipse.californium.tools.coapbench.VirtualClientManager;
 
@@ -39,6 +38,7 @@ public class CoapBench {
 	public static final int DEFAULT_CLIENTS = 1;
 	public static final int DEFAULT_SERVERS = 1;
 	public static final int DEFAULT_TIME = 30; // [s]
+	public static final int DEFAULT_LIFETIME = 86400;
 	public static final String DEFAULT_METHOD = "GET";
 
 	public static final String DEFAULT_MASTER_ADDRESS = "localhost";
@@ -71,9 +71,12 @@ public class CoapBench {
 		String payload = null;
 		String method = DEFAULT_METHOD;
 		String clients = ""+DEFAULT_CLIENTS;
+		String scheme = null;
 		int time = DEFAULT_TIME;
 		int index = 0;
 		boolean withLatency = false;
+		String register = null;
+		int timeout = 0;
 		while (index < args.length) {
 			String arg = args[index];
 			
@@ -85,6 +88,10 @@ public class CoapBench {
 				bindAddr = args[index+1];
 			} else if ("-m".equals(arg)) {
 				method = args[index+1];
+			} else if ("-R".equals(arg)) {
+				register = args[index+1];
+			} else if ("-lt".equals(arg)) {
+				timeout = Integer.parseInt(args[index+1]);
 			} else if ("-y".equals(arg)) {
 				payload = readPayload(args[index+1]);
 			} else if ("-latency".equals(arg)) {
@@ -102,13 +109,43 @@ public class CoapBench {
 			}
 			index += 2;
 		}
-		if (target == null) {
+		if (target == null){
 			System.err.println("Error: No target specified");
 			printUsage();
 			return;
 		}
-		
-		URI uri = new URI(target);
+
+		scheme = target;
+
+		/* We have to create a registration URI as follow: POST coap://address:port/?lt=time&ep=name*/
+		if (register != null){
+			
+			if (!target.substring(target.length() - 1).equals("/")){
+				target +=  '/';
+			}
+			// The registration must be a POST message 
+			method = "POST";
+			
+			/* Set up the lifetime variable correctly */
+			if (timeout > DEFAULT_LIFETIME) {
+				timeout = DEFAULT_LIFETIME; 
+			} else if (timeout < 60) {
+				if (time >60){
+					timeout = time;
+				} else {
+					timeout = 60;
+				}
+			}
+			
+			//Add the lt variable into the URI
+			String lt = "rd?lwm2m=1.0&lt=" + timeout ;
+			target +=  lt;
+			//Add the ep variable into the URI
+			String ep = "&ep=" + register;
+			target +=  ep;
+		}
+			
+		//URI uri = new URI(target);
 		
 		InetSocketAddress bindSAddr = null;
 		if (bindAddr != null) {
@@ -117,9 +154,11 @@ public class CoapBench {
 			System.err.println("Bind clients to local address: "+bindSAddr);
 			System.err.println("Note that on some systems (e.g. Windows) it now is not possible to send requests to localhost.");
 		}
-		
+
 		int[] series = convertSeries(clients);
-		VirtualClientManager manager = new VirtualClientManager(uri, bindSAddr, method, payload);
+		VirtualClientManager manager = new VirtualClientManager(target, bindSAddr, method, payload);
+		manager.setRegistration(register!=null);
+        manager.setScheme(scheme);
 		if (withLatency) manager.setEnableLatency(true);
 		manager.runConcurrencySeries(series, time*1000);
 		
@@ -213,7 +252,8 @@ public class CoapBench {
 
 		    while (line != null) {
 		        sb.append(line);
-		        sb.append(System.lineSeparator());
+		        //TODO: Comment this line for wakamaa
+		        //sb.append(System.lineSeparator());
 		        line = br.readLine();
 		    }
 		    payload = sb.toString();
@@ -245,6 +285,14 @@ public class CoapBench {
 				+ "\n            This option expects a filename and specifies the payload of the operation. The file has to be a text file."
 				+ "\n    -b ADDRESS"
 				+ "\n            Bind the clients to the specified local address (by default the system chooses)."
+				+ "\nLWM2M operations:"
+				+ "\n    -R name [-lt integer]"
+				+ "\n            Register the clients to the specified local address. Every client is identified by an integer from 1 to the maximum"
+				+ "CONCURRENCY value. The tool uses that information to register every client with a different endpoint name adding a variable:"
+				+ "\"ep=name+CONCURRENCY number\" at the end of the URI." 
+				+ "\n"
+				+ "\n            \"lt\" indicates the expected lifetime of a Registration in seconds, maximum lifetime is 86400 seconds and minimum is 60. If \"lt\" is not "
+				+ "specified, the time in the \"t\" parameter is used. The tool adds a new variable \"lt=integer\" at the end of the URI"
 				+ "\n"
 				+ "\nOPTIONS for the master are:"
 				+ "\n    -p PORT"
@@ -255,8 +303,8 @@ public class CoapBench {
 				+ "\n            The address of the master."
 				+ "\n    -p PORT"
 				+ "\n            The port of the master."
-				+ "\n	 -s"
-				+ "\n			 Specifies whether the resource should be observed (applies if the request type is set to GET)."
+				+ "\n    -s"
+				+ "\n            Specifies whether the resource should be observed (applies if the request type is set to GET)."
 				+ "\n"
 				+ "\nExamples:"
 				+ "\nStart 50 clients that concurrently send GET requests for 60 seconds"
@@ -267,6 +315,13 @@ public class CoapBench {
 				+ "\n"
 				+ "\nStart a slave which connects with the specified master"
 				+ "\n    java -jar coapbench.jar -slave -a 192.168.1.33 -p 8888"
+				+ "\n"
+				+ "\nLWM2M examples:"
+				+ "\n"
+				+ "\nRegister 50 clients with endpoints names ranging from \"node1\" to \"node50\" for 60 seconds. After that, the clients"
+				+ "send updates for that registration. The clients get automatically de-register after 70 seconds."
+				+ "\n    java -jar coapbench.jar -c 50 -y file.txt -t 60 -R node -lt 70 coap://localhost:5683/"
+				+ "\n"
 			);
 		// TODO: add parameters for methods (GET, POST, ...), payload, checks, and logfile
 		// TODO: stepwise increase

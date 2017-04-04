@@ -47,7 +47,6 @@ public class VeryEcoMessageProducer implements Iterator<byte[]> {
 	public void setURI(URI uri, String method, String payload) {
 		
 		Request request;
-		
 		switch (method){
 			case("PUT"):
 			case("put"):
