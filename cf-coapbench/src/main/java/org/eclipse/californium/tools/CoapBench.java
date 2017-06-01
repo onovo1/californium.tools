@@ -68,6 +68,8 @@ public class CoapBench {
 	public static void mainBench(String[] args) throws Exception {
 		String target = null;
 		String bindAddr = null;
+		String bindMultipleAddr = null;
+		boolean multipleAddr = false;
 		String payload = null;
 		String method = DEFAULT_METHOD;
 		String clients = ""+DEFAULT_CLIENTS;
@@ -86,6 +88,8 @@ public class CoapBench {
 				time = Integer.parseInt(args[index+1]);
 			} else if ("-b".equals(arg)) {
 				bindAddr = args[index+1];
+			} else if ("-d".equals(arg)) {
+				bindMultipleAddr = args[index+1];
 			} else if ("-m".equals(arg)) {
 				method = args[index+1];
 			} else if ("-R".equals(arg)) {
@@ -148,7 +152,13 @@ public class CoapBench {
 		//URI uri = new URI(target);
 		
 		InetSocketAddress bindSAddr = null;
-		if (bindAddr != null) {
+		if (bindMultipleAddr != null) {
+			InetAddress ba = InetAddress.getByName(bindMultipleAddr);
+			bindSAddr = new InetSocketAddress(ba, 0);
+			multipleAddr = true;
+			System.err.println("Bind clients to multiple IP addresses starting from: "+bindSAddr);
+			System.err.println("Note that the binding does not check the available IPs in the system. The user should check that before assigning the IPs.");
+		} else if (bindAddr != null) {
 			InetAddress ba = InetAddress.getByName(bindAddr);
 			bindSAddr = new InetSocketAddress(ba, 0);
 			System.err.println("Bind clients to local address: "+bindSAddr);
@@ -156,7 +166,7 @@ public class CoapBench {
 		}
 
 		int[] series = convertSeries(clients);
-		VirtualClientManager manager = new VirtualClientManager(target, bindSAddr, method, payload);
+		VirtualClientManager manager = new VirtualClientManager(target, bindSAddr, method, payload, multipleAddr);
 		manager.setRegistration(register!=null);
         manager.setScheme(scheme);
 		if (withLatency) manager.setEnableLatency(true);
@@ -285,6 +295,8 @@ public class CoapBench {
 				+ "\n            This option expects a filename and specifies the payload of the operation. The file has to be a text file."
 				+ "\n    -b ADDRESS"
 				+ "\n            Bind the clients to the specified local address (by default the system chooses)."
+				+ "\n    -d ADDRESS"
+				+ "\n            Bind every client to a different IP address starting from the specified ADDRESS. Remember to add first the address to your local interface."
 				+ "\nLWM2M operations:"
 				+ "\n    -R name [-lt integer]"
 				+ "\n            Register the clients to the specified local address. Every client is identified by an integer from 1 to the maximum"

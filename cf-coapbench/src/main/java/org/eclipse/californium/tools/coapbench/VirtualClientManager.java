@@ -19,6 +19,8 @@ package org.eclipse.californium.tools.coapbench;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.math.BigInteger;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
@@ -43,6 +45,7 @@ public class VirtualClientManager {
 	private InetSocketAddress bindAddr;
 	private String method;
 	private String payload;
+	private boolean multipleAddr;
 	private boolean register = false;
 	private String scheme;
 
@@ -55,21 +58,52 @@ public class VirtualClientManager {
 	private boolean enableLatency = false;
 	private boolean verbose;
 
+
+	/**
+	 * Returns a new InetAddress that is one more than the passed in address.
+	 * This method works for both IPv4 and IPv6 addresses.
+	 *
+	 * @param address the InetAddress to increment
+	 * @return a new InetAddress that is one more than the passed in address.
+	 * @throws IllegalArgumentException if InetAddress is at the end of its
+	 *         range.
+	 */
+	private InetAddress increment(InetAddress address) {
+		byte[] addr = address.getAddress();
+		int i = addr.length - 1;
+		while (i >= 0 && addr[i] == (byte) 0xff) {
+			addr[i] = 0;
+			i--;
+		}
+
+		//Preconditions.checkArgument(
+			//	i >= 0, "Incrementing " + address + " would wrap.");
+
+		addr[i]++;
+		try {
+			return InetAddress.getByAddress(addr);
+		} catch (UnknownHostException e) {
+			throw new AssertionError(e);
+		}
+	}
+	  
 	public VirtualClientManager() throws Exception {
 		this(null);
 	}
 	
 	public VirtualClientManager(String target) throws Exception {
-		this(target, null, null, null);
+		this(target, null, null, null, false);
 	}
 	
-	public VirtualClientManager(String target, InetSocketAddress bindAddr, String method, String payload) throws Exception {
+	public VirtualClientManager(String target, InetSocketAddress bindAddr, String method, String payload, boolean multipleAddr) throws Exception {
 		this.target = target;
 		this.bindAddr = bindAddr;
 		this.method = method;
 		this.payload = payload;
 		this.clients = new ArrayList<VirtualClient>();
 		this.timer = new Timer();
+		this.multipleAddr = multipleAddr;
+		this.multipleAddr = multipleAddr;
 	}
 	
 	public void runConcurrencySeries(int[] cs, int time) throws Exception {
@@ -103,25 +137,50 @@ public class VirtualClientManager {
 	}
 	
 	public void setClientCount(int c) throws Exception {
+		
 		if (c < clients.size()) {
 			for (int i=clients.size()-1; i>=c; i--)
 				clients.remove(i).close(); // close and remove
 		} else {
+		
+			/*System.out.println(new String(bindAddr.getAddress().getAddress())); // 
+			System.out.println(new String(rawIP.toByteArray())); //
+			
+			System.out.println(Arrays.toString(rawIP.toByteArray()));*/
+			//System.out.println(Arrays.toString(bindAddr.getAddress().getAddress()));
+			//xx = InetAddress.getByAddress(rawIP.toByteArray())
+				
+			
+			//oscar@oscar-Latitude:~$ sudo ip addr add fe80::b6b6:76ff:fece:495c/64 dev wlan0
 			if (!register){ 
+				System.out.println("Entra en no register");
 				uri = new URI(target);
 				for (int i=clients.size(); i<c; i++) {
+					
+					System.out.println(Arrays.toString(bindAddr.getAddress().getAddress()));
 					VirtualClient vc = new VirtualClient(uri, bindAddr, method, payload);
 					vc.setCheckLatency(enableLatency);
 					clients.add(vc);
+					if (multipleAddr){
+						//System.out.println(Arrays.toString(bindAddr.getAddress().getAddress()));
+						bindAddr = new InetSocketAddress(increment(bindAddr.getAddress()), 0);
+					}
 				}
 			} else {
+				System.out.println("Entra en register");
 				for (int i=clients.size(); i<c; i++) {
 					uri = new URI(target + Integer.toString(i));
+				
+					System.out.println(Arrays.toString(bindAddr.getAddress().getAddress()));
 					VirtualClient vc = new VirtualClient(uri, bindAddr, method, payload);
 					vc.setRegistration(true);
 					vc.setScheme(scheme);
 					vc.setCheckLatency(enableLatency);
 					clients.add(vc);
+					if (multipleAddr){
+						//System.out.println(Arrays.toString(bindAddr.getAddress().getAddress()));
+						bindAddr = new InetSocketAddress(increment(bindAddr.getAddress()), 0);
+					}
 				}
 			}
 		}
