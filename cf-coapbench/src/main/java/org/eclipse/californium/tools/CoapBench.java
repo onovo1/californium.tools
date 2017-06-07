@@ -142,7 +142,9 @@ public class CoapBench {
 			}
 			
 			//Add the lt variable into the URI
-			String lt = "rd?lwm2m=1.0&lt=" + timeout ;
+			//wakaama needs the definition of lwm2m=1.0, even though it is not in the standards
+			//String lt = "rd?lwm2m=1.0&lt=" + timeout ;
+			String lt = "rd?lt=" + timeout ;
 			target +=  lt;
 			//Add the ep variable into the URI
 			String ep = "&ep=" + register;

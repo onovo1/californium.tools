@@ -150,35 +150,34 @@ public class VirtualClientManager {
 			//System.out.println(Arrays.toString(bindAddr.getAddress().getAddress()));
 			//xx = InetAddress.getByAddress(rawIP.toByteArray())
 				
-			
-			//oscar@oscar-Latitude:~$ sudo ip addr add fe80::b6b6:76ff:fece:495c/64 dev wlan0
 			if (!register){ 
-				System.out.println("Entra en no register");
 				uri = new URI(target);
 				for (int i=clients.size(); i<c; i++) {
 					
-					System.out.println(Arrays.toString(bindAddr.getAddress().getAddress()));
+					/*if (bindAddr!=null){
+					   System.out.println(Arrays.toString(bindAddr.getAddress().getAddress()));
+					} */  
 					VirtualClient vc = new VirtualClient(uri, bindAddr, method, payload);
 					vc.setCheckLatency(enableLatency);
 					clients.add(vc);
 					if (multipleAddr){
-						//System.out.println(Arrays.toString(bindAddr.getAddress().getAddress()));
 						bindAddr = new InetSocketAddress(increment(bindAddr.getAddress()), 0);
 					}
 				}
 			} else {
-				System.out.println("Entra en register");
 				for (int i=clients.size(); i<c; i++) {
+					
 					uri = new URI(target + Integer.toString(i));
 				
-					System.out.println(Arrays.toString(bindAddr.getAddress().getAddress()));
+					/*if (bindAddr!=null){
+					   System.out.println(Arrays.toString(bindAddr.getAddress().getAddress()));
+					}*/
 					VirtualClient vc = new VirtualClient(uri, bindAddr, method, payload);
 					vc.setRegistration(true);
 					vc.setScheme(scheme);
 					vc.setCheckLatency(enableLatency);
 					clients.add(vc);
 					if (multipleAddr){
-						//System.out.println(Arrays.toString(bindAddr.getAddress().getAddress()));
 						bindAddr = new InetSocketAddress(increment(bindAddr.getAddress()), 0);
 					}
 				}
